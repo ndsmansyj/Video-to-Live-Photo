@@ -1,8 +1,12 @@
 <p align="center">
-  <img src="Assets/README/hero.svg" alt="SPP Live Export" width="100%">
+  <img src="Assets/README/hero.svg" alt="Video to Live Photo" width="100%">
 </p>
 
-# SPP Live Export
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
+
+# Video to Live Photo
 
 A small native macOS utility for turning DaVinci Resolve video exports into Apple Live Photos and AirDropping them to iPhone.
 
@@ -68,7 +72,7 @@ Artifacts are written to `dist/`.
 
 ## Usage
 
-1. Open **SPP Live Export**.
+1. Open **SPP Live Export** (the app name in the current v0.4.0 binary).
 2. Point DaVinci Resolve at the configured watch folder, or click **Import Video**.
 3. Wait for the Live Photos to appear.
 4. Select individual items, a whole date, a Shift range, or all visible items.

@@ -31,7 +31,7 @@
   </g>
 
   <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" fill="#17191D">
-    <text x="540" y="198" font-size="64" font-weight="760">SPP Live Export</text>
+    <text x="540" y="198" font-size="64" font-weight="760">Video to Live Photo</text>
     <text x="544" y="260" font-size="28" font-weight="520" fill="#555C67">DaVinci → Live Photo → AirDrop → iPhone</text>
     <text x="544" y="324" font-size="21" fill="#727985">Native macOS · Local processing · No Photos library · No iCloud required</text>
     <g transform="translate(544 366)">
