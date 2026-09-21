@@ -1,89 +1,119 @@
+<p align="center">
+  <img src="Assets/README/hero.svg" alt="SPP Live Export" width="100%">
+</p>
+
 # SPP Live Export
 
 A small native macOS utility for turning DaVinci Resolve video exports into Apple Live Photos and AirDropping them to iPhone.
 
+**Local-only.** No iCloud required. No Photos-library import. No server.
+
+## Why
+
+A normal AirDrop of a matching HEIC + MOV arrives on iPhone as two separate files.
+
+SPP Live Export generates a valid Live Photo pair, wraps it as a macOS-recognized Live Photo bundle, and hands that bundle to AirDrop so the iPhone receives a real Live Photo.
+
+<p align="center">
+  <img src="Assets/README/workflow.svg" alt="SPP Live Export workflow" width="100%">
+</p>
+
 ## Features
 
-- Watches a DaVinci Resolve export folder automatically
-- Supports manual multi-file import
-- Converts MOV / MP4 / M4V into Apple Live Photo pairs
-- Preserves the original video stream with passthrough export whenever possible
-- Shows portrait-first thumbnails grouped by date
-- Supports per-day selection, select all, Shift range selection, and batch AirDrop
-- Wraps each pair as a system-recognized Private Live Photo Bundle (.pvt) before AirDrop
-- Includes processing history, Finder reveal, custom input/output folders, login launch, and thumbnail-size settings
-- Does not require iCloud Photos
-- Does not write generated media into the Mac Photos library
-- Never moves, modifies, overwrites, or deletes source videos
+- Automatic watch folder for DaVinci Resolve exports
+- Manual multi-file import
+- MOV / MP4 / M4V → Apple Live Photo
+- Passthrough video export whenever possible
+- Portrait-first thumbnail gallery
+- Date grouping and per-day selection
+- Select all and Shift range selection
+- Batch AirDrop
+- Processing history and Finder reveal
+- Configurable input / output folders
+- Launch at login
+- Compact / standard / large thumbnail modes
+- Optional codec / resolution / frame-rate metadata
+- No Mac Photos-library dependency
+- Source footage is never moved, overwritten, modified, or deleted
 
-## Workflow
+## Install
 
-DaVinci Resolve / manual import
-→ SPP Live Export
-→ HEIC + MOV Live Photo pair
-→ Private Live Photo Bundle (.pvt)
-→ AirDrop
-→ iPhone Photos → Live Photo
+### Download
 
-## Requirements
+Open the repository Releases page and download the latest DMG.
+
+The current public build is ad-hoc signed, not notarized with an Apple Developer ID. macOS may show an unidentified-developer warning. If that happens, use **System Settings → Privacy & Security → Open Anyway**, or build from source.
+
+### Build from source
+
+Requirements:
 
 - Apple Silicon Mac
 - macOS 13 or later
-- iPhone with AirDrop enabled
-- DaVinci Resolve is optional
-
-ffprobe is optional. If it is available at /usr/local/bin/ffprobe or /opt/homebrew/bin/ffprobe, the app shows richer codec / resolution / frame-rate metadata. Conversion itself does not depend on FFmpeg.
-
-## Build
+- Apple Command Line Tools / Swift
 
 Build the app:
 
-    ./scripts/build.sh
+```bash
+./scripts/build.sh
+```
 
 Build the app and a local DMG:
 
-    ./scripts/build.sh --dmg
+```bash
+./scripts/build.sh --dmg
+```
 
-Artifacts are written to dist/.
+Artifacts are written to `dist/`.
 
-The project intentionally stays lightweight and uses native Swift / SwiftUI / AVFoundation instead of a large dependency stack.
+## Usage
 
-## Source layout
+1. Open **SPP Live Export**.
+2. Point DaVinci Resolve at the configured watch folder, or click **Import Video**.
+3. Wait for the Live Photos to appear.
+4. Select individual items, a whole date, a Shift range, or all visible items.
+5. Click **AirDrop** and choose your iPhone.
 
-- Sources/App.swift — app entry point and page routing
-- Sources/LiveLibrary.swift — watcher, conversion orchestration, AirDrop packaging, settings
-- Sources/Components.swift — reusable UI and thumbnail cache
-- Sources/RecentView.swift — date-grouped gallery and batch selection
-- Sources/HistoryView.swift — generated-item history
-- Sources/SettingsView.swift — app settings
-- HelperSources/SPPLiveExport/main.swift — Live Photo pair generator
-- Assets/IconConcepts/ — SVG icon concepts
+The iPhone receives each selected item as a Live Photo.
+
+## Optional metadata
+
+`ffprobe` is optional. If available at `/usr/local/bin/ffprobe` or `/opt/homebrew/bin/ffprobe`, the app shows richer codec / resolution / frame-rate metadata.
+
+Conversion itself does not depend on FFmpeg.
+
+## Project layout
+
+- `Sources/App.swift` — app entry point and page routing
+- `Sources/LiveLibrary.swift` — watcher, conversion orchestration, AirDrop packaging, settings
+- `Sources/Components.swift` — reusable UI and thumbnail cache
+- `Sources/RecentView.swift` — date-grouped gallery and batch selection
+- `Sources/HistoryView.swift` — generated-item history
+- `Sources/SettingsView.swift` — app settings
+- `HelperSources/SPPLiveExport/main.swift` — Live Photo pair generator
+- `Assets/Brand/` — app icon source
+- `Assets/README/` — project artwork
 
 ## Safety
 
 Source media is treated as read-only.
 
-SPP Live Export may:
-- read source clips
-- create new output files
-- create temporary AirDrop bundles in its own cache directory
-- remove only its own failed/temporary generated files and AirDrop cache
+SPP Live Export may create:
+- HEIC + MOV outputs
+- its own processing markers
+- temporary AirDrop bundles in its cache directory
 
-It does not delete, move, overwrite, or modify original footage.
+It may remove only:
+- its own failed partial exports
+- its own AirDrop cache older than 24 hours
 
-## Privacy
-
-No cloud service, analytics, account, or server is required. Conversion and packaging happen locally on the Mac.
+It does **not** delete, move, overwrite, or modify original footage.
 
 ## Compatibility note
 
-AirDrop preservation of Live Photo behavior currently relies on macOS recognizing the .pvt package as com.apple.private.live-photo-bundle. This works in the tested macOS/iPhone workflow, but it is a private Apple bundle type and could change in a future OS release.
+AirDrop preservation currently relies on macOS recognizing the `.pvt` package as `com.apple.private.live-photo-bundle`.
 
-A locally built or ad-hoc signed DMG is not notarized. Public binary releases may trigger Gatekeeper until the project uses a Developer ID and notarization; building from source avoids that distribution issue.
-
-## Status
-
-0.4.0 — core DaVinci → Live Photo → AirDrop workflow is working on real devices. UI and packaging are still being refined.
+This works in the tested macOS + iPhone workflow, but it is a private Apple bundle type and could change in a future OS release.
 
 ## License
 

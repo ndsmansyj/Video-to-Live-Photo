@@ -7,3 +7,6 @@ app_preview.png
 .build/
 .swiftpm/
 .dmg-stage/
+
+Assets/Brand/render/
+Assets/Brand/AppIcon.iconset/

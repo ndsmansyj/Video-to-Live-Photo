@@ -4,6 +4,7 @@
 <dict>
   <key>CFBundleDisplayName</key><string>SPP Live Export</string>
   <key>CFBundleExecutable</key><string>SPP Live Export</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleIdentifier</key><string>com.songpanpan.SPPLiveExport</string>
   <key>CFBundleName</key><string>SPP Live Export</string>
   <key>CFBundlePackageType</key><string>APPL</string>

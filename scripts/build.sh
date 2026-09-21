@@ -10,6 +10,7 @@ DMG="$DIST/SPP-Live-Export-0.4.0.dmg"
 rm -rf "$APP" "$STAGE"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$DIST"
 cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"
+cp "$ROOT/Assets/Brand/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 swiftc -parse-as-library \
   "$ROOT/HelperSources/SPPLiveExport/main.swift" \
