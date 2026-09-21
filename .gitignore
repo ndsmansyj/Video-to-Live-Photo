@@ -1,0 +1,9 @@
+.DS_Store
+dist/
+dmg-stage*/
+*.dmg
+*.app
+app_preview.png
+.build/
+.swiftpm/
+.dmg-stage/
