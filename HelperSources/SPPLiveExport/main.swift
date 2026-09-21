@@ -58,9 +58,16 @@ struct LivePhotoExporter {
         let imageURL = outputDirectory.appendingPathComponent(stem + ".heic")
         let videoURL = outputDirectory.appendingPathComponent(stem + ".mov")
 
-        try writeHEIC(image: coverImage, uuid: uuid, to: imageURL)
-        try await writeMOV(asset: asset, uuid: uuid, coverOffset: coverSeconds, to: videoURL)
-        return (imageURL, videoURL)
+        do {
+            try writeHEIC(image: coverImage, uuid: uuid, to: imageURL)
+            try await writeMOV(asset: asset, uuid: uuid, coverOffset: coverSeconds, to: videoURL)
+            return (imageURL, videoURL)
+        } catch {
+            // Only clean files created by this failed export. Source media is never touched.
+            try? fm.removeItem(at: imageURL)
+            try? fm.removeItem(at: videoURL)
+            throw error
+        }
     }
 
     private func writeHEIC(image: CGImage, uuid: String, to url: URL) throws {
