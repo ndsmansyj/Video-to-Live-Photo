@@ -84,6 +84,21 @@ enum AppPage: String, CaseIterable {
     case recent, history, settings, about
 }
 
+enum UIFixture: String {
+    case pending
+    case history
+    case clipEditor = "clip-editor"
+
+    static var current: UIFixture? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flagIndex = arguments.firstIndex(of: "--ui-fixture"),
+              arguments.indices.contains(flagIndex + 1) else {
+            return nil
+        }
+        return UIFixture(rawValue: arguments[flagIndex + 1])
+    }
+}
+
 enum ThumbnailDensity: String, CaseIterable, Identifiable {
     case compact, standard, large
 

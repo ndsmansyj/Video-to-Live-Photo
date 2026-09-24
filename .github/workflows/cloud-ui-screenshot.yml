@@ -1,0 +1,97 @@
+name: UI Snapshots
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "Sources/**"
+      - "Assets/Brand/**"
+      - "Info.plist"
+      - "scripts/build.sh"
+      - "scripts/find_window_id.swift"
+      - "scripts/make_ui_overview.swift"
+      - ".github/workflows/cloud-ui-screenshot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-turbo-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshot:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build app
+        run: ./scripts/build.sh
+
+      - name: Capture app states
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Video to Live Turbo.app"
+          mkdir -p ui-captures
+
+          capture() {
+            local name="$1"
+            shift
+            open -na "$APP" --args "$@"
+
+            local window_id=""
+            for attempt in {1..20}; do
+              sleep 1
+              window_id="$(swift scripts/find_window_id.swift "Video to Live Turbo" 2>/dev/null || true)"
+              [[ -n "$window_id" ]] && break
+            done
+
+            [[ -n "$window_id" ]] || { echo "No app window found for state: $name" >&2; exit 1; }
+            screencapture -x -o -l "$window_id" "ui-captures/${name}.png"
+            file "ui-captures/${name}.png"
+            killall "Video to Live Turbo" || true
+            sleep 1
+          }
+
+          capture recent-empty --ui-page recent
+          capture recent-pending --ui-page recent --ui-fixture pending
+          capture history-filled --ui-page history --ui-fixture history
+          capture settings --ui-page settings
+          capture about --ui-page about
+          capture clip-editor --ui-fixture clip-editor
+
+          swift scripts/make_ui_overview.swift \
+            ui-captures/overview.png \
+            ui-captures/recent-empty.png \
+            ui-captures/recent-pending.png \
+            ui-captures/history-filled.png \
+            ui-captures/clip-editor.png \
+            ui-captures/settings.png \
+            ui-captures/about.png
+
+          file ui-captures/overview.png
+
+          sips -s format jpeg -s formatOptions 90             ui-captures/overview.png             --out ui-captures/overview.jpg >/dev/null
+          file ui-captures/overview.jpg
+          ls -lh ui-captures
+
+      - name: Upload lightweight overview
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-turbo-ui-overview
+          path: |
+            ui-captures/overview.jpg
+            ui-captures/overview.png
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload full screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-turbo-ui-pages
+          path: ui-captures/*.png
+          if-no-files-found: error
+          retention-days: 3
