@@ -74,19 +74,17 @@ jobs:
 
           file ui-captures/overview.png
 
-          if sips --formats | grep -qi "webp"; then
-            sips -s format webp ui-captures/overview.png --out ui-captures/overview.webp >/dev/null
-            file ui-captures/overview.webp
-          else
-            echo "WebP encode unavailable on this runner; PNG remains the fallback."
-          fi
+          sips -s format jpeg -s formatOptions 90             ui-captures/overview.png             --out ui-captures/overview.jpg >/dev/null
+          file ui-captures/overview.jpg
           ls -lh ui-captures
 
       - name: Upload lightweight overview
         uses: actions/upload-artifact@v4
         with:
           name: live-turbo-ui-overview
-          path: ui-captures/overview.*
+          path: |
+            ui-captures/overview.jpg
+            ui-captures/overview.png
           if-no-files-found: error
           retention-days: 3
 
