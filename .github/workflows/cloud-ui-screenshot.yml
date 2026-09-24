@@ -64,7 +64,7 @@ jobs:
           capture clip-editor --ui-fixture clip-editor
 
           swift scripts/make_ui_overview.swift \
-            ui-captures/overview.jpg \
+            ui-captures/overview.png \
             ui-captures/recent-empty.png \
             ui-captures/recent-pending.png \
             ui-captures/history-filled.png \
@@ -72,14 +72,21 @@ jobs:
             ui-captures/settings.png \
             ui-captures/about.png
 
-          file ui-captures/overview.jpg
+          file ui-captures/overview.png
+
+          if sips --formats | grep -qi "webp"; then
+            sips -s format webp ui-captures/overview.png --out ui-captures/overview.webp >/dev/null
+            file ui-captures/overview.webp
+          else
+            echo "WebP encode unavailable on this runner; PNG remains the fallback."
+          fi
           ls -lh ui-captures
 
       - name: Upload lightweight overview
         uses: actions/upload-artifact@v4
         with:
           name: live-turbo-ui-overview
-          path: ui-captures/overview.jpg
+          path: ui-captures/overview.*
           if-no-files-found: error
           retention-days: 3
 
