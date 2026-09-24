@@ -11,9 +11,9 @@ let output = args[0]
 let inputs = Array(args.dropFirst())
 
 let columns = 3
-let cellWidth: CGFloat = 420
-let imageHeight: CGFloat = 270
-let labelHeight: CGFloat = 34
+let cellWidth: CGFloat = 840
+let imageHeight: CGFloat = 540
+let labelHeight: CGFloat = 60
 let cellHeight = imageHeight + labelHeight
 let rows = Int(ceil(Double(inputs.count) / Double(columns)))
 let canvasSize = NSSize(
@@ -28,7 +28,7 @@ NSColor.windowBackgroundColor.setFill()
 NSBezierPath(rect: NSRect(origin: .zero, size: canvasSize)).fill()
 
 let attributes: [NSAttributedString.Key: Any] = [
-    .font: NSFont.systemFont(ofSize: 15, weight: .semibold),
+    .font: NSFont.systemFont(ofSize: 26, weight: .semibold),
     .foregroundColor: NSColor.labelColor
 ]
 
@@ -40,14 +40,14 @@ for (index, path) in inputs.enumerated() {
 
     NSColor.controlBackgroundColor.setFill()
     NSBezierPath(
-        roundedRect: NSRect(x: x + 7, y: y + 7, width: cellWidth - 14, height: cellHeight - 14),
-        xRadius: 12,
+        roundedRect: NSRect(x: x + 12, y: y + 12, width: cellWidth - 24, height: cellHeight - 24),
+        xRadius: 18,
         yRadius: 12
     ).fill()
 
     if let image = NSImage(contentsOfFile: path) {
         let source = image.size
-        let available = NSSize(width: cellWidth - 28, height: imageHeight - 20)
+        let available = NSSize(width: cellWidth - 48, height: imageHeight - 36)
         let scale = min(available.width / max(source.width, 1), available.height / max(source.height, 1))
         let targetSize = NSSize(width: source.width * scale, height: source.height * scale)
         let target = NSRect(
@@ -64,7 +64,7 @@ for (index, path) in inputs.enumerated() {
         .lastPathComponent
         .replacingOccurrences(of: "-", with: " ")
     NSString(string: label).draw(
-        at: NSPoint(x: x + 18, y: y + 13),
+        at: NSPoint(x: x + 30, y: y + 20),
         withAttributes: attributes
     )
 }
@@ -75,7 +75,7 @@ guard let tiff = canvas.tiffRepresentation,
       let bitmap = NSBitmapImageRep(data: tiff),
       let jpeg = bitmap.representation(
         using: .jpeg,
-        properties: [.compressionFactor: 0.68]
+        properties: [.compressionFactor: 0.82]
       ) else {
     fputs("failed to encode overview\n", stderr)
     exit(3)
