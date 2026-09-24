@@ -3,7 +3,18 @@ import AppKit
 
 struct ContentView: View {
     @StateObject private var library = LiveLibrary()
-    @State private var page: AppPage = .recent
+    @State private var page: AppPage
+
+    init() {
+        let arguments = ProcessInfo.processInfo.arguments
+        if let flagIndex = arguments.firstIndex(of: "--ui-page"),
+           arguments.indices.contains(flagIndex + 1),
+           let requestedPage = AppPage(rawValue: arguments[flagIndex + 1]) {
+            _page = State(initialValue: requestedPage)
+        } else {
+            _page = State(initialValue: .recent)
+        }
+    }
 
     var body: some View {
         HStack(spacing: 0) {
