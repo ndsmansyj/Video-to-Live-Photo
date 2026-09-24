@@ -3,17 +3,26 @@ import Foundation
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard args.count >= 3 else {
-    fputs("usage: make_ui_overview.swift OUTPUT.jpg INPUT.png...\n", stderr)
+    fputs("usage: make_ui_overview.swift OUTPUT.png INPUT.png...\n", stderr)
     exit(2)
 }
 
 let output = args[0]
 let inputs = Array(args.dropFirst())
 
-let columns = 3
-let cellWidth: CGFloat = 840
-let imageHeight: CGFloat = 540
-let labelHeight: CGFloat = 60
+let columns: Int
+switch inputs.count {
+case 0...4:
+    columns = 2
+case 5...9:
+    columns = 3
+default:
+    columns = 4
+}
+
+let cellWidth: CGFloat = 1200
+let imageHeight: CGFloat = 780
+let labelHeight: CGFloat = 84
 let cellHeight = imageHeight + labelHeight
 let rows = Int(ceil(Double(inputs.count) / Double(columns)))
 let canvasSize = NSSize(
@@ -33,7 +42,7 @@ canvasBackground.setFill()
 NSBezierPath(rect: NSRect(origin: .zero, size: canvasSize)).fill()
 
 let attributes: [NSAttributedString.Key: Any] = [
-    .font: NSFont.systemFont(ofSize: 26, weight: .semibold),
+    .font: NSFont.systemFont(ofSize: 32, weight: .semibold),
     .foregroundColor: NSColor.labelColor
 ]
 
@@ -44,34 +53,34 @@ for (index, path) in inputs.enumerated() {
     let y = canvasSize.height - CGFloat(row + 1) * cellHeight
 
     let cardRect = NSRect(
-        x: x + 12,
-        y: y + 12,
-        width: cellWidth - 24,
-        height: cellHeight - 24
+        x: x + 18,
+        y: y + 18,
+        width: cellWidth - 36,
+        height: cellHeight - 36
     )
     let card = NSBezierPath(
         roundedRect: cardRect,
-        xRadius: 18,
-        yRadius: 18
+        xRadius: 22,
+        yRadius: 22
     )
 
     cardFill.setFill()
     card.fill()
 
     cardBorder.setStroke()
-    card.lineWidth = 1.5
+    card.lineWidth = 2
     card.stroke()
 
     dividerColor.setStroke()
     let divider = NSBezierPath()
-    divider.move(to: NSPoint(x: cardRect.minX + 14, y: y + labelHeight + 8))
-    divider.line(to: NSPoint(x: cardRect.maxX - 14, y: y + labelHeight + 8))
-    divider.lineWidth = 1
+    divider.move(to: NSPoint(x: cardRect.minX + 20, y: y + labelHeight + 12))
+    divider.line(to: NSPoint(x: cardRect.maxX - 20, y: y + labelHeight + 12))
+    divider.lineWidth = 1.5
     divider.stroke()
 
     if let image = NSImage(contentsOfFile: path) {
         let source = image.size
-        let available = NSSize(width: cellWidth - 48, height: imageHeight - 36)
+        let available = NSSize(width: cellWidth - 72, height: imageHeight - 54)
         let scale = min(available.width / max(source.width, 1), available.height / max(source.height, 1))
         let targetSize = NSSize(width: source.width * scale, height: source.height * scale)
         let target = NSRect(
@@ -88,7 +97,7 @@ for (index, path) in inputs.enumerated() {
         .lastPathComponent
         .replacingOccurrences(of: "-", with: " ")
     NSString(string: label).draw(
-        at: NSPoint(x: x + 30, y: y + 20),
+        at: NSPoint(x: x + 42, y: y + 28),
         withAttributes: attributes
     )
 }
@@ -97,13 +106,10 @@ canvas.unlockFocus()
 
 guard let tiff = canvas.tiffRepresentation,
       let bitmap = NSBitmapImageRep(data: tiff),
-      let jpeg = bitmap.representation(
-        using: .jpeg,
-        properties: [.compressionFactor: 0.82]
-      ) else {
+      let png = bitmap.representation(using: .png, properties: [:]) else {
     fputs("failed to encode overview\n", stderr)
     exit(3)
 }
 
-try jpeg.write(to: URL(fileURLWithPath: output), options: .atomic)
+try png.write(to: URL(fileURLWithPath: output), options: .atomic)
 print(output)
