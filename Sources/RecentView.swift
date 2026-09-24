@@ -3,236 +3,388 @@ import AppKit
 
 struct RecentView: View {
     @ObservedObject var library: LiveLibrary
-    @State private var dateFilterKey = "all"
 
-    private var calendar: Calendar {
-        var calendar = Calendar.current
-        calendar.locale = Locale(identifier: "zh_CN")
-        return calendar
+    @AppStorage("historyPanelExpanded") private var historyExpanded = true
+    @State private var editingItem: LiveItem?
+    @State private var editingPending: PendingVideo?
+    @State private var isDropTarget = false
+
+    private var sessionItems: [LiveItem] {
+        library.sessionItems.sorted { $0.modifiedAt > $1.modifiedAt }
     }
 
-    private var allSections: [DateSectionModel] {
-        let grouped = Dictionary(grouping: library.items) {
-            calendar.startOfDay(for: $0.modifiedAt)
-        }
-
-        return grouped.keys.sorted(by: >).map { date in
-            DateSectionModel(
-                date: date,
-                items: (grouped[date] ?? []).sorted { $0.modifiedAt > $1.modifiedAt }
-            )
-        }
-    }
-
-    private var displayedSections: [DateSectionModel] {
-        dateFilterKey == "all"
-            ? allSections
-            : allSections.filter { dayKey($0.date) == dateFilterKey }
-    }
-
-    private var displayedItems: [LiveItem] {
-        displayedSections.flatMap(\.items)
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(minimum: 74), spacing: 12),
+            count: max(3, library.thumbnailColumnCount)
+        )
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                workspaceHeader
+                Divider()
 
-            if displayedSections.isEmpty {
-                emptyState
-            } else {
-                gallery
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        importWorkspace
+
+                        if let message = library.operationMessage {
+                            operationBanner(message)
+                        }
+
+                        if !library.pendingVideos.isEmpty {
+                            pendingSection
+                        }
+
+                        generatedSection
+                    }
+                    .padding(24)
+                    .padding(.bottom, library.selected.isEmpty ? 12 : 76)
+                }
+
+                if !library.selected.isEmpty {
+                    selectionBar
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if !library.selected.isEmpty {
-                selectionBar
+            if historyExpanded {
+                Divider()
+                HistoryPanel(
+                    library: library,
+                    onCollapse: { historyExpanded = false }
+                )
+                .frame(width: 300)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.16), value: historyExpanded)
+        .sheet(item: $editingPending) { item in
+            ClipEditorView(
+                sourceURL: item.sourceURL,
+                title: item.baseName,
+                coverSeconds: item.coverSeconds,
+                clipStart: item.clipStart,
+                clipDuration: item.clipDuration,
+                actionTitle: "保存设置"
+            ) { cover, start, duration in
+                library.updatePending(
+                    id: item.id,
+                    coverSeconds: cover,
+                    clipStart: start,
+                    clipDuration: duration
+                )
+                return true
+            }
+        }
+        .sheet(item: $editingItem) { item in
+            if let source = item.sourceURL {
+                ClipEditorView(
+                    sourceURL: source,
+                    title: item.baseName,
+                    coverSeconds: item.coverSeconds,
+                    clipStart: item.clipStart,
+                    clipDuration: item.clipDuration,
+                    actionTitle: "重新生成"
+                ) { cover, start, duration in
+                    await library.regenerate(
+                        item,
+                        coverSeconds: cover,
+                        clipStart: start,
+                        clipDuration: duration
+                    )
+                }
             }
         }
     }
 
-    private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Live Photo")
-                    .font(.system(size: 27, weight: .bold))
-                Text("DaVinci 自动监听，也可以手动导入视频。")
-                    .font(.system(size: 13))
+    private var workspaceHeader: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("转换工作区")
+                    .font(.system(size: 26, weight: .semibold))
+                Text("Video → Live Photo → iPhone")
+                    .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            Button {
-                library.manualImport()
-            } label: {
-                Label("导入视频", systemImage: "plus")
-            }
-
-            dateMenu
-
-            Button {
-                library.toggleSelection(for: displayedItems)
-            } label: {
-                Label(
-                    allDisplayedSelected ? "取消全选" : "全选",
-                    systemImage: "checkmark.circle"
-                )
-            }
-
-            Button {
-                library.airdropSelected()
-            } label: {
-                Label("AirDrop", systemImage: "antenna.radiowaves.left.and.right")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(library.selected.isEmpty)
-        }
-        .padding(.horizontal, 26)
-        .padding(.top, 22)
-        .padding(.bottom, 16)
-    }
-
-    private var dateMenu: some View {
-        Menu {
-            Button("全部日期") { dateFilterKey = "all" }
-            Divider()
-            ForEach(allSections) { section in
+            if !historyExpanded {
                 Button {
-                    dateFilterKey = dayKey(section.date)
+                    historyExpanded = true
                 } label: {
-                    Text("\(dayTitle(section.date))  ·  \(section.items.count)")
+                    Label("历史", systemImage: "sidebar.right")
                 }
+                .help("打开历史")
             }
-        } label: {
-            Label(filterTitle, systemImage: "calendar")
-                .frame(minWidth: 96)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 17)
+    }
+
+    private var importWorkspace: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        isDropTarget
+                            ? Color.accentColor.opacity(0.08)
+                            : Color(nsColor: .controlBackgroundColor)
+                    )
+
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(
+                        isDropTarget
+                            ? Color.accentColor.opacity(0.75)
+                            : Color.primary.opacity(0.10),
+                        style: StrokeStyle(lineWidth: 1, dash: [7, 6])
+                    )
+
+                HStack(spacing: 18) {
+                    Image(systemName: library.isProcessing ? "livephoto.play" : "film.stack")
+                        .font(.system(size: 34, weight: .medium))
+                        .foregroundStyle(library.isProcessing ? Color.accentColor : Color.secondary)
+                        .frame(width: 48)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(library.isProcessing ? library.statusText : "导入视频")
+                            .font(.system(size: 17, weight: .semibold))
+
+                        Text(
+                            library.isProcessing
+                                ? "正在生成，完成后会出现在“本次生成”。"
+                                : "拖入视频，调整后生成 Live Photo。"
+                        )
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    if library.isProcessing {
+                        ProgressView().controlSize(.small)
+                    } else if library.pendingVideos.isEmpty {
+                        Button {
+                            library.manualImport()
+                        } label: {
+                            Label("选择视频…", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    } else {
+                        Button {
+                            library.manualImport()
+                        } label: {
+                            Label("选择视频…", systemImage: "plus")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
+                }
+                .padding(.horizontal, 22)
+            }
+            .frame(height: 118)
+            .dropDestination(for: URL.self) { urls, _ in
+                library.importVideos(urls)
+                return !urls.isEmpty
+            } isTargeted: { isDropTarget = $0 }
+
+            if library.isMonitoring {
+                HStack(spacing: 7) {
+                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                    Text("自动转换文件夹已开启")
+                        .font(.system(size: 11.5, weight: .medium))
+                    Text(library.inputURL.lastPathComponent)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .padding(.horizontal, 4)
+            }
         }
     }
 
-    private var gallery: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 28, pinnedViews: [.sectionHeaders]) {
-                ForEach(displayedSections) { section in
-                    Section {
-                        LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(
-                                        minimum: library.thumbnailDensity.gridRange.0,
-                                        maximum: library.thumbnailDensity.gridRange.1
-                                    ),
-                                    spacing: 12
-                                )
-                            ],
-                            spacing: 14
-                        ) {
-                            ForEach(section.items) { item in
-                                LiveCard(
-                                    item: item,
-                                    selected: library.selected.contains(item.id),
-                                    showTechnicalInfo: library.showTechnicalInfo
-                                ) {
-                                    library.toggle(
-                                        item,
-                                        orderedItems: displayedItems,
-                                        extendRange: NSEvent.modifierFlags.contains(.shift)
-                                    )
-                                }
-                                .contextMenu {
-                                    Button("AirDrop 这一条") { library.airdrop([item]) }
-                                    Button("在 Finder 中显示") { library.reveal(item) }
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 26)
-                    } header: {
-                        sectionHeader(section)
+    private var pendingSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text("待生成")
+                    .font(.system(size: 17, weight: .semibold))
+
+                Text("\(library.pendingVideos.count)")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.primary.opacity(0.06), in: Capsule())
+
+                Text("点击画面调整片段与封面")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                BatchSoundToggle(isOn: $library.manualIncludeAudio)
+                    .disabled(library.isProcessing)
+
+                Button {
+                    library.generatePending()
+                } label: {
+                    Label(
+                        library.pendingVideos.count == 1
+                            ? "生成 Live Photo"
+                            : "生成 \(library.pendingVideos.count) 个 Live Photo",
+                        systemImage: "sparkles.rectangle.stack"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(library.isProcessing)
+            }
+
+            LazyVGrid(columns: columns, spacing: 14) {
+                ForEach(library.pendingVideos) { item in
+                    PendingVideoCard(
+                        item: item,
+                        onEdit: { editingPending = item },
+                        onRemove: { library.removePending(item.id) }
+                    )
+                    .contextMenu {
+                        Button("调整片段与封面…") { editingPending = item }
+                        Button("移除") { library.removePending(item.id) }
                     }
                 }
             }
-            .padding(.bottom, library.selected.isEmpty ? 28 : 102)
         }
     }
 
-    private func sectionHeader(_ section: DateSectionModel) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(dayTitle(section.date))
-                    .font(.system(size: 17, weight: .bold))
-                Text("\(section.items.count) 个 Live Photo")
-                    .font(.system(size: 11.5))
+    private var generatedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            generatedHeader
+
+            if !sessionItems.isEmpty {
+                LazyVGrid(columns: columns, spacing: 14) {
+                    ForEach(sessionItems) { item in
+                        LiveCard(
+                            item: item,
+                            selected: library.selected.contains(item.id),
+                            showTechnicalInfo: library.showTechnicalInfo,
+                            onToggle: {
+                                library.toggle(
+                                    item,
+                                    orderedItems: sessionItems,
+                                    extendRange: NSEvent.modifierFlags.contains(.shift)
+                                )
+                            }
+                        )
+                        .contextMenu {
+                            if item.canEdit {
+                                Button("重新调整…") { editingItem = item }
+                            }
+                            Button("AirDrop 这一条") { library.airdrop([item]) }
+                            Button("在 Finder 中显示") { library.reveal(item) }
+                        }
+                    }
+                }
+            } else {
+                Text("生成的 Live Photo 会显示在这里。")
+                    .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 110, alignment: .center)
+            }
+        }
+    }
+
+    private var generatedHeader: some View {
+        HStack(spacing: 12) {
+            Text("本次生成")
+                .font(.system(size: 17, weight: .semibold))
+
+            if !sessionItems.isEmpty {
+                Text("\(sessionItems.count)")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.primary.opacity(0.06), in: Capsule())
             }
 
             Spacer()
 
-            let selected = library.isGroupSelected(section.items)
-            Button {
-                library.toggleGroup(section.items)
-            } label: {
-                Label(
-                    selected ? "取消本日" : "选择本日",
-                    systemImage: selected ? "checkmark.circle.fill" : "checkmark.circle"
-                )
+            if !sessionItems.isEmpty {
+                HStack(spacing: 7) {
+                    Image(systemName: "rectangle.grid.3x2")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    Slider(
+                        value: Binding(
+                            get: { library.thumbnailZoom },
+                            set: { library.setThumbnailZoom($0) }
+                        ),
+                        in: 0...1
+                    )
+                    .frame(width: 110)
+                    .help("缩略图大小")
+
+                    Image(systemName: "rectangle.grid.2x2")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    library.toggleSelection(for: sessionItems)
+                } label: {
+                    Label(allSessionSelected ? "取消全选" : "全选", systemImage: "checkmark.circle")
+                }
             }
-            .buttonStyle(.borderless)
-            .font(.system(size: 12.5, weight: .semibold))
         }
-        .padding(.horizontal, 26)
-        .padding(.vertical, 11)
-        .background(.ultraThinMaterial)
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "livephoto")
-                .font(.system(size: 42, weight: .medium))
-                .foregroundStyle(.secondary)
-            Text("还没有 Live Photo")
-                .font(.system(size: 18, weight: .semibold))
-            Text("把 DaVinci 输出到监听目录，或者手动导入一批视频。")
+    private func operationBanner(_ message: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: library.failedSources.isEmpty ? "info.circle" : "exclamationmark.triangle")
+                .foregroundStyle(
+                    library.failedSources.isEmpty
+                        ? Color(nsColor: .secondaryLabelColor)
+                        : Color.orange
+                )
+
+            Text(message)
                 .font(.system(size: 12.5))
-                .foregroundStyle(.secondary)
-            Button {
-                library.manualImport()
-            } label: {
-                Label("导入视频", systemImage: "plus")
+                .lineLimit(2)
+
+            Spacer()
+
+            if !library.failedSources.isEmpty {
+                Button("重试失败项") { library.retryFailed() }
+                    .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderedProminent)
+
+            Button { library.operationMessage = nil } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            Color(nsColor: .controlBackgroundColor),
+            in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+        )
     }
 
     private var selectionBar: some View {
-        HStack {
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: 30, height: 30)
-                    Text("\(library.selected.count)")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("已选择 \(library.selected.count) 个 Live Photo")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("可按日期追加，或 Shift 连续选择")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
+        HStack(spacing: 16) {
+            Text("已选 \(library.selected.count) 项")
+                .font(.system(size: 13, weight: .semibold))
             Spacer()
-
-            Button("清除选择") {
-                library.selected.removeAll()
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-
+            Button("取消选择") { library.clearSelection() }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
             Button {
                 library.airdropSelected()
             } label: {
@@ -243,41 +395,13 @@ struct RecentView: View {
             .controlSize(.large)
         }
         .padding(.horizontal, 24)
-        .frame(height: 76)
+        .frame(height: 66)
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) { Divider() }
     }
 
-    private var allDisplayedSelected: Bool {
-        let ids = Set(displayedItems.map(\.id))
+    private var allSessionSelected: Bool {
+        let ids = Set(sessionItems.map(\.id))
         return !ids.isEmpty && ids.isSubset(of: library.selected)
-    }
-
-    private var filterTitle: String {
-        if dateFilterKey == "all" { return "全部日期" }
-        return allSections.first { dayKey($0.date) == dateFilterKey }
-            .map { dayTitle($0.date) } ?? "全部日期"
-    }
-
-    private func dayKey(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
-    }
-
-    private func dayTitle(_ date: Date) -> String {
-        if calendar.isDateInToday(date) { return "今天" }
-        if calendar.isDateInYesterday(date) { return "昨天" }
-
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat =
-            calendar.component(.year, from: date) == calendar.component(.year, from: Date())
-            ? "M月d日 EEEE"
-            : "yyyy年M月d日 EEEE"
-        return formatter.string(from: date)
     }
 }

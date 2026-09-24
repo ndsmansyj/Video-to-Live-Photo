@@ -18,6 +18,8 @@ struct ContentView: View {
                     HistoryView(library: library)
                 case .settings:
                     SettingsView(library: library)
+                case .about:
+                    AboutView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

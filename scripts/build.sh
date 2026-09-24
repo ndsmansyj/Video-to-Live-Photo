@@ -3,9 +3,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
-APP="$DIST/SPP Live Export.app"
+APP="$DIST/Video to Live Turbo.app"
 STAGE="$ROOT/.dmg-stage"
-DMG="$DIST/SPP-Live-Export-0.4.0.dmg"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Info.plist")"
+DMG="$DIST/Video to Live Turbo $VERSION.dmg"
 
 rm -rf "$APP" "$STAGE"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$DIST"
@@ -24,7 +25,7 @@ swiftc -parse-as-library \
 
 swiftc -parse-as-library \
   "$ROOT"/Sources/*.swift \
-  -o "$APP/Contents/MacOS/SPP Live Export" \
+  -o "$APP/Contents/MacOS/Video to Live Turbo" \
   -framework SwiftUI \
   -framework AppKit \
   -framework Foundation \
@@ -38,11 +39,11 @@ codesign --verify --deep --strict "$APP"
 
 if [[ "$#" -gt 0 && "$1" == "--dmg" ]]; then
   mkdir -p "$STAGE"
-  cp -R "$APP" "$STAGE/SPP Live Export.app"
+  cp -R "$APP" "$STAGE/Video to Live Turbo.app"
   ln -s /Applications "$STAGE/Applications"
   rm -f "$DMG"
   hdiutil create \
-    -volname "SPP Live Export" \
+    -volname "Video to Live Turbo" \
     -srcfolder "$STAGE" \
     -ov \
     -format UDZO \

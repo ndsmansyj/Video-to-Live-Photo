@@ -1,12 +1,14 @@
 import SwiftUI
 import AppKit
 import Foundation
+import AVFoundation
 import ServiceManagement
 import UniformTypeIdentifiers
 
 @MainActor
 final class LiveLibrary: ObservableObject {
     @Published var items: [LiveItem] = []
+    @Published var pendingVideos: [PendingVideo] = []
     @Published var selected: Set<String> = []
     @Published var isMonitoring: Bool
     @Published var isProcessing = false
@@ -15,11 +17,25 @@ final class LiveLibrary: ObservableObject {
     @Published var outputURL: URL
     @Published var launchAtLoginEnabled = false
     @Published var thumbnailDensity: ThumbnailDensity
+    @Published var thumbnailZoom: Double
     @Published var showTechnicalInfo: Bool
+    @Published var manualIncludeAudio = true
+    @Published private var sessionGeneratedIDs: Set<String> = []
+    @Published var operationMessage: String?
+    @Published var failedSources: [URL] = []
 
     var processedURL: URL {
         outputURL.deletingLastPathComponent()
             .appendingPathComponent("Processed", isDirectory: true)
+    }
+
+    var sessionItems: [LiveItem] {
+        items.filter { sessionGeneratedIDs.contains($0.id) }
+    }
+
+    var thumbnailColumnCount: Int {
+        let clamped = min(max(thumbnailZoom, 0), 1)
+        return Int(round(7 - clamped * 4))
     }
 
     private var timer: Timer?
@@ -45,12 +61,14 @@ final class LiveLibrary: ObservableObject {
             isDirectory: true
         )
         isMonitoring = defaults.object(forKey: "monitoringEnabled") == nil
-            ? true : defaults.bool(forKey: "monitoringEnabled")
+            ? false : defaults.bool(forKey: "monitoringEnabled")
         thumbnailDensity = ThumbnailDensity(
             rawValue: defaults.string(forKey: "thumbnailDensity") ?? ""
         ) ?? .standard
+        thumbnailZoom = defaults.object(forKey: "thumbnailZoom") == nil
+            ? 0.25 : defaults.double(forKey: "thumbnailZoom")
         showTechnicalInfo = defaults.object(forKey: "showTechnicalInfo") == nil
-            ? true : defaults.bool(forKey: "showTechnicalInfo")
+            ? false : defaults.bool(forKey: "showTechnicalInfo")
 
         if inputURL.standardizedFileURL == outputURL.standardizedFileURL {
             outputURL = root.appendingPathComponent("Output", isDirectory: true)
@@ -64,6 +82,7 @@ final class LiveLibrary: ObservableObject {
         prepareFolders()
         refresh()
         cleanupOldAirDropCache()
+        if isMonitoring { scanPendingInputs() }
 
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -103,13 +122,22 @@ final class LiveLibrary: ObservableObject {
                     options: .regularExpression
                 )
 
+                let source = sourceMetadata(for: stem)
+                let sourceURL = source.map { URL(fileURLWithPath: $0.sourcePath) }
+                    .flatMap { fm.fileExists(atPath: $0.path) ? $0 : nil }
+
                 return LiveItem(
                     id: stem,
                     baseName: base,
                     imageURL: image,
                     videoURL: movie,
                     modifiedAt: modified,
-                    media: mediaInfo(for: movie)
+                    media: mediaInfo(for: movie),
+                    sourceURL: sourceURL,
+                    coverSeconds: source?.coverSeconds,
+                    clipStart: source?.clipStart,
+                    clipDuration: source?.clipDuration,
+                    includeAudio: source?.includeAudio
                 )
             }
             .sorted { $0.modifiedAt > $1.modifiedAt }
@@ -119,8 +147,8 @@ final class LiveLibrary: ObservableObject {
         mediaCache = mediaCache.filter { activeMedia.contains($0.key) }
         selected.formIntersection(Set(next.map(\.id)))
         statusText = isProcessing
-            ? "正在生成 Live…"
-            : (isMonitoring ? "正在监听 DaVinci" : "监听已暂停")
+            ? "正在生成 Live Photo…"
+            : (isMonitoring ? "文件夹自动转换中" : "就绪")
     }
 
     // MARK: - Selection
@@ -156,6 +184,11 @@ final class LiveLibrary: ObservableObject {
         items.filter { selected.contains($0.id) }
     }
 
+    func clearSelection() {
+        selected.removeAll()
+        selectionAnchorID = nil
+    }
+
     private func toggleIDs(_ ids: Set<String>) {
         if !ids.isEmpty && ids.isSubset(of: selected) {
             selected.subtract(ids)
@@ -171,20 +204,23 @@ final class LiveLibrary: ObservableObject {
     }
 
     func airdrop(_ picks: [LiveItem]) {
-        guard !picks.isEmpty,
-              let service = NSSharingService(named: .sendViaAirDrop) else { return }
+        guard !picks.isEmpty else { return }
+        guard let service = NSSharingService(named: .sendViaAirDrop) else {
+            operationMessage = "AirDrop 当前不可用。"
+            return
+        }
 
         do {
             cleanupOldAirDropCache()
             let packages = try makeLivePhotoPackages(picks)
             guard service.canPerform(withItems: packages) else {
-                statusText = "AirDrop 无法处理 Live Photo Bundle"
+                operationMessage = "无法准备 AirDrop 文件，请重试。"
                 return
             }
-            statusText = "准备 AirDrop \(packages.count) 个 Live Photo"
+            operationMessage = nil
             service.perform(withItems: packages)
         } catch {
-            statusText = "Live Photo Bundle 生成失败"
+            operationMessage = "无法准备 AirDrop 文件，请重试。"
         }
     }
 
@@ -197,22 +233,127 @@ final class LiveLibrary: ObservableObject {
         }
 
         let panel = NSOpenPanel()
-        panel.title = "导入视频生成 Live Photo"
-        panel.message = "可多选。原视频只读取，不移动、不修改。"
+        panel.title = "导入视频"
+        panel.message = "导入后可先选择片段、封面和时长，再手动生成。原视频只读取，不移动、不修改。"
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.movie]
 
         guard panel.runModal() == .OK else { return }
-        let videos = panel.urls.filter(supportedVideo)
-        guard !videos.isEmpty else { return }
+        importVideos(panel.urls)
+    }
+
+    func importVideos(_ urls: [URL]) {
+        guard !isProcessing else {
+            operationMessage = "正在处理，请稍后再导入。"
+            return
+        }
+
+        let existing = Set(pendingVideos.map { $0.sourceURL.standardizedFileURL.path })
+        let videos = urls
+            .filter(supportedVideo)
+            .filter { !existing.contains($0.standardizedFileURL.path) }
+
+        guard !videos.isEmpty else {
+            operationMessage = "没有新的可导入视频。"
+            return
+        }
 
         Task {
+            var added = 0
+            var failed: [String] = []
+
             for video in videos {
+                do {
+                    let asset = AVURLAsset(url: video)
+                    let loaded = try await asset.load(.duration)
+                    let seconds = CMTimeGetSeconds(loaded)
+                    guard seconds.isFinite, seconds > 0 else {
+                        failed.append(video.lastPathComponent)
+                        continue
+                    }
+
+                    pendingVideos.append(
+                        PendingVideo(
+                            sourceURL: video,
+                            sourceDuration: seconds
+                        )
+                    )
+                    added += 1
+                } catch {
+                    failed.append(video.lastPathComponent)
+                }
+            }
+
+            if failed.isEmpty {
+                operationMessage = added == 1
+                    ? "已加入待生成，可先调整封面和时长。"
+                    : "已加入 \(added) 个待生成视频。"
+            } else {
+                operationMessage = "已加入 \(added) 个，\(failed.count) 个无法读取。"
+            }
+        }
+    }
+
+    func updatePending(
+        id: String,
+        coverSeconds: Double,
+        clipStart: Double,
+        clipDuration: Double
+    ) {
+        guard let index = pendingVideos.firstIndex(where: { $0.id == id }) else { return }
+        let current = pendingVideos[index]
+        pendingVideos[index] = PendingVideo(
+            sourceURL: current.sourceURL,
+            sourceDuration: current.sourceDuration,
+            coverSeconds: coverSeconds,
+            clipStart: clipStart,
+            clipDuration: clipDuration
+        )
+    }
+
+    func removePending(_ id: String) {
+        pendingVideos.removeAll { $0.id == id }
+    }
+
+    func generatePending() {
+        guard !isProcessing, !pendingVideos.isEmpty else { return }
+        let batch = pendingVideos
+
+        Task {
+            var successIDs: Set<String> = []
+            var failures: [URL] = []
+
+            for pending in batch {
                 let inWatchFolder =
-                    video.deletingLastPathComponent().standardizedFileURL
+                    pending.sourceURL.deletingLastPathComponent().standardizedFileURL
                     == inputURL.standardizedFileURL
-                await process(video, markProcessed: inWatchFolder)
+
+                let ok = await process(
+                    pending.sourceURL,
+                    markProcessed: inWatchFolder,
+                    coverSeconds: pending.coverSeconds,
+                    clipStart: pending.clipStart,
+                    clipDuration: pending.clipDuration,
+                    includeAudio: manualIncludeAudio
+                )
+                if ok {
+                    successIDs.insert(pending.id)
+                } else {
+                    failures.append(pending.sourceURL)
+                }
+            }
+
+            pendingVideos.removeAll { successIDs.contains($0.id) }
+            failedSources = failures
+
+            let success = successIDs.count
+            if failures.isEmpty {
+                operationMessage = success == 1
+                    ? "Live Photo 已生成。"
+                    : "已生成 \(success) 个 Live Photo。"
+            } else {
+                operationMessage = "已生成 \(success) 个，失败 \(failures.count) 个。"
             }
         }
     }
@@ -235,7 +376,12 @@ final class LiveLibrary: ObservableObject {
 
         for video in videos {
             let path = video.path
-            guard !activeInputs.contains(path), !isMarkedProcessed(video) else { continue }
+            let stagedManually = pendingVideos.contains {
+                $0.sourceURL.standardizedFileURL.path == video.standardizedFileURL.path
+            }
+            guard !activeInputs.contains(path),
+                  !isMarkedProcessed(video),
+                  !stagedManually else { continue }
 
             let signature = fileFingerprint(video)
             guard !signature.isEmpty else { continue }
@@ -243,7 +389,7 @@ final class LiveLibrary: ObservableObject {
 
             if observedSignatures[path] == signature {
                 activeInputs.insert(path)
-                Task { await process(video, markProcessed: true) }
+                Task { _ = await process(video, markProcessed: true) }
                 return
             }
 
@@ -251,7 +397,15 @@ final class LiveLibrary: ObservableObject {
         }
     }
 
-    private func process(_ source: URL, markProcessed: Bool) async {
+    @discardableResult
+    private func process(
+        _ source: URL,
+        markProcessed: Bool,
+        coverSeconds: Double? = nil,
+        clipStart: Double? = nil,
+        clipDuration: Double? = nil,
+        includeAudio: Bool = true
+    ) async -> Bool {
         let destination = outputURL
         isProcessing = true
         statusText = "正在生成 \(source.lastPathComponent)"
@@ -265,54 +419,111 @@ final class LiveLibrary: ObservableObject {
 
         guard let tool = bundledToolURL(),
               FileManager.default.isExecutableFile(atPath: tool.path) else {
-            statusText = "转换器缺失"
-            return
+            operationMessage = "转换器缺失，无法生成 Live Photo。"
+            failedSources = [source]
+            return false
         }
 
         do {
-            let result = try await runExporter(tool: tool, source: source, destination: destination)
+            let result = try await runExporter(
+                tool: tool,
+                source: source,
+                destination: destination,
+                coverSeconds: coverSeconds,
+                clipStart: clipStart,
+                clipDuration: clipDuration,
+                includeAudio: includeAudio
+            )
             guard result.status == 0,
-                  let line = result.output.split(separator: "\n")
-                    .map(String.init)
-                    .last(where: { $0.hasPrefix("OK\t") }) else {
+                  let info = parseExporterOutput(result.output) else {
                 failedSignatures[source.path] = fileFingerprint(source)
-                statusText = "转换失败：\(source.lastPathComponent)"
-                return
-            }
-
-            let parts = line.split(separator: "\t").map(String.init)
-            guard parts.count >= 4 else {
-                failedSignatures[source.path] = fileFingerprint(source)
-                statusText = "转换结果异常"
-                return
+                failedSources = [source]
+                operationMessage = "转换失败：\(source.lastPathComponent)"
+                return false
             }
 
             failedSignatures.removeValue(forKey: source.path)
             if markProcessed {
-                writeMarker(
-                    source: source,
-                    heic: parts[2],
-                    mov: parts[3]
-                )
+                writeMarker(source: source, heic: info.heic, mov: info.mov)
             }
-            statusText = "Live 已生成"
+            let stem = URL(fileURLWithPath: info.heic).deletingPathExtension().lastPathComponent
+            writeSourceMetadata(
+                stem: stem,
+                source: source,
+                coverSeconds: info.coverSeconds,
+                clipStart: info.clipStart,
+                clipDuration: info.clipDuration,
+                includeAudio: includeAudio
+            )
+            sessionGeneratedIDs.insert(stem)
+            return true
         } catch {
             failedSignatures[source.path] = fileFingerprint(source)
-            statusText = "转换器启动失败：\(error.localizedDescription)"
+            failedSources = [source]
+            operationMessage = "转换失败：\(source.lastPathComponent)"
+            return false
         }
+    }
+
+    private struct ExporterInfo {
+        let heic: String
+        let mov: String
+        let coverSeconds: Double
+        let clipStart: Double
+        let clipDuration: Double
+    }
+
+    private func parseExporterOutput(_ output: String) -> ExporterInfo? {
+        guard let line = output.split(separator: "\n")
+            .map(String.init)
+            .last(where: { $0.hasPrefix("OK\t") }) else { return nil }
+        let parts = line.split(separator: "\t").map(String.init)
+        guard parts.count >= 7,
+              let cover = Double(parts[4]),
+              let start = Double(parts[5]),
+              let duration = Double(parts[6]) else { return nil }
+        return ExporterInfo(
+            heic: parts[2],
+            mov: parts[3],
+            coverSeconds: cover,
+            clipStart: start,
+            clipDuration: duration
+        )
     }
 
     private func runExporter(
         tool: URL,
         source: URL,
-        destination: URL
+        destination: URL,
+        coverSeconds: Double? = nil,
+        clipStart: Double? = nil,
+        clipDuration: Double? = nil,
+        includeAudio: Bool = true,
+        preferredStem: String? = nil
     ) async throws -> (status: Int32, output: String) {
         try await withCheckedThrowingContinuation { continuation in
             let task = Process()
             let pipe = Pipe()
 
             task.executableURL = tool
-            task.arguments = [source.path, destination.path]
+            var arguments: [String] = []
+            if let coverSeconds {
+                arguments += ["--cover", String(format: "%.6f", coverSeconds)]
+            }
+            if let clipStart {
+                arguments += ["--start", String(format: "%.6f", clipStart)]
+            }
+            if let clipDuration {
+                arguments += ["--duration", String(format: "%.6f", clipDuration)]
+            }
+            if !includeAudio {
+                arguments += ["--mute"]
+            }
+            if let preferredStem {
+                arguments += ["--stem", preferredStem]
+            }
+            arguments += [source.path, destination.path]
+            task.arguments = arguments
             task.standardOutput = pipe
             task.standardError = pipe
             task.terminationHandler = { process in
@@ -331,16 +542,129 @@ final class LiveLibrary: ObservableObject {
         }
     }
 
+    func retryFailed() {
+        let pending = failedSources
+        guard !pending.isEmpty else { return }
+        failedSources = []
+        operationMessage = nil
+
+        Task {
+            var success = 0
+            var failures: [URL] = []
+            for source in pending where FileManager.default.fileExists(atPath: source.path) {
+                let inWatchFolder =
+                    source.deletingLastPathComponent().standardizedFileURL
+                    == inputURL.standardizedFileURL
+                if await process(source, markProcessed: inWatchFolder) {
+                    success += 1
+                } else {
+                    failures.append(source)
+                }
+            }
+            failedSources = failures
+            operationMessage = failures.isEmpty
+                ? "重试完成，已生成 \(success) 个 Live Photo。"
+                : "重试完成 \(success) 个，仍失败 \(failures.count) 个。"
+        }
+    }
+
+    func regenerate(
+        _ item: LiveItem,
+        coverSeconds: Double,
+        clipStart: Double,
+        clipDuration: Double
+    ) async -> Bool {
+        guard let source = item.sourceURL,
+              FileManager.default.fileExists(atPath: source.path) else {
+            operationMessage = "原视频不可用，无法调整封面。"
+            return false
+        }
+        guard let tool = bundledToolURL() else {
+            operationMessage = "转换器缺失，无法调整封面。"
+            return false
+        }
+
+        isProcessing = true
+        statusText = "正在更新 \(item.baseName)"
+        let fm = FileManager.default
+        let temp = fm.temporaryDirectory
+            .appendingPathComponent("Video to Live Turbo Edit-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? fm.removeItem(at: temp)
+            isProcessing = false
+            refresh()
+        }
+
+        do {
+            try fm.createDirectory(at: temp, withIntermediateDirectories: true)
+            let result = try await runExporter(
+                tool: tool,
+                source: source,
+                destination: temp,
+                coverSeconds: coverSeconds,
+                clipStart: clipStart,
+                clipDuration: clipDuration,
+                includeAudio: item.includeAudio ?? true,
+                preferredStem: item.id
+            )
+            guard result.status == 0, let info = parseExporterOutput(result.output) else {
+                operationMessage = "调整失败，原结果已保留。"
+                return false
+            }
+
+            let newImage = temp.appendingPathComponent(info.heic)
+            let newVideo = temp.appendingPathComponent(info.mov)
+            let backupImage = temp.appendingPathComponent("backup.heic")
+            let backupVideo = temp.appendingPathComponent("backup.mov")
+            let originalImageDate = modificationDate(item.imageURL)
+            let originalVideoDate = modificationDate(item.videoURL)
+            try fm.copyItem(at: item.imageURL, to: backupImage)
+            try fm.copyItem(at: item.videoURL, to: backupVideo)
+
+            do {
+                try fm.removeItem(at: item.imageURL)
+                try fm.copyItem(at: newImage, to: item.imageURL)
+                try fm.removeItem(at: item.videoURL)
+                try fm.copyItem(at: newVideo, to: item.videoURL)
+                try? fm.setAttributes([.modificationDate: originalImageDate], ofItemAtPath: item.imageURL.path)
+                try? fm.setAttributes([.modificationDate: originalVideoDate], ofItemAtPath: item.videoURL.path)
+            } catch {
+                try? fm.removeItem(at: item.imageURL)
+                try? fm.removeItem(at: item.videoURL)
+                try? fm.copyItem(at: backupImage, to: item.imageURL)
+                try? fm.copyItem(at: backupVideo, to: item.videoURL)
+                throw error
+            }
+
+            writeSourceMetadata(
+                stem: item.id,
+                source: source,
+                coverSeconds: info.coverSeconds,
+                clipStart: info.clipStart,
+                clipDuration: info.clipDuration,
+                includeAudio: item.includeAudio ?? true
+            )
+            mediaCache.removeValue(forKey: item.videoURL.path)
+            ThumbnailCache.shared.remove(for: item.imageURL)
+            operationMessage = "封面已更新。"
+            return true
+        } catch {
+            operationMessage = "调整失败，原结果已保留。"
+            return false
+        }
+    }
+
     // MARK: - Settings
 
     func setMonitoring(_ enabled: Bool) {
         isMonitoring = enabled
         UserDefaults.standard.set(enabled, forKey: "monitoringEnabled")
-        statusText = enabled ? "正在监听 DaVinci" : "监听已暂停"
+        statusText = enabled ? "文件夹自动转换中" : "就绪"
+        if enabled { scanPendingInputs() }
     }
 
     func chooseInputDirectory() {
-        guard let url = chooseDirectory(title: "选择 DaVinci 监听目录", current: inputURL) else { return }
+        guard let url = chooseDirectory(title: "选择自动转换文件夹", current: inputURL) else { return }
         guard url.standardizedFileURL != outputURL.standardizedFileURL else {
             statusText = "监听目录不能和输出目录相同"
             return
@@ -370,6 +694,11 @@ final class LiveLibrary: ObservableObject {
     func setThumbnailDensity(_ value: ThumbnailDensity) {
         thumbnailDensity = value
         UserDefaults.standard.set(value.rawValue, forKey: "thumbnailDensity")
+    }
+
+    func setThumbnailZoom(_ value: Double) {
+        thumbnailZoom = min(max(value, 0), 1)
+        UserDefaults.standard.set(thumbnailZoom, forKey: "thumbnailZoom")
     }
 
     func setShowTechnicalInfo(_ enabled: Bool) {
@@ -462,9 +791,40 @@ final class LiveLibrary: ObservableObject {
         processed_at=\(ISO8601DateFormatter().string(from: Date()))
         heic=\(heic)
         mov=\(mov)
-        engine=SPP Live Export.app
+        engine=Video to Live Turbo
         """
         try? text.write(to: markerURL(source), atomically: true, encoding: .utf8)
+    }
+
+
+    private func sourceMetadataURL(for stem: String) -> URL {
+        processedURL.appendingPathComponent(stem + ".source.json")
+    }
+
+    private func sourceMetadata(for stem: String) -> LiveSourceMetadata? {
+        let url = sourceMetadataURL(for: stem)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(LiveSourceMetadata.self, from: data)
+    }
+
+    private func writeSourceMetadata(
+        stem: String,
+        source: URL,
+        coverSeconds: Double,
+        clipStart: Double,
+        clipDuration: Double,
+        includeAudio: Bool
+    ) {
+        let metadata = LiveSourceMetadata(
+            sourcePath: source.path,
+            coverSeconds: coverSeconds,
+            clipStart: clipStart,
+            clipDuration: clipDuration,
+            includeAudio: includeAudio,
+            generatedAt: Date()
+        )
+        guard let data = try? JSONEncoder().encode(metadata) else { return }
+        try? data.write(to: sourceMetadataURL(for: stem), options: .atomic)
     }
 
     // MARK: - Media metadata
@@ -514,7 +874,14 @@ final class LiveLibrary: ObservableObject {
         }
 
         let seconds = Double(fields["duration"] ?? "") ?? 0
-        let duration = seconds > 0 ? String(format: "%.2fs", seconds) : "Live Photo"
+        let duration: String
+        if seconds <= 0 {
+            duration = "Live Photo"
+        } else if abs(seconds.rounded() - seconds) < 0.02 {
+            duration = "\(Int(seconds.rounded())) 秒"
+        } else {
+            duration = String(format: "%.1f 秒", seconds)
+        }
         let width = fields["width"] ?? ""
         let height = fields["height"] ?? ""
         let size = width.isEmpty || height.isEmpty ? "Live" : "\(width)×\(height)"

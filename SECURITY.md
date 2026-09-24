@@ -1,6 +1,6 @@
 # Security and source-media policy
 
-SPP Live Export is designed around a strict non-destructive media workflow.
+Video to Live Turbo is designed around a strict non-destructive media workflow.
 
 - Source footage is read-only.
 - The app does not delete source footage.

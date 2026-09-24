@@ -1,123 +1,96 @@
 <p align="center">
-  <img src="Assets/README/hero.svg" alt="Video to Live Photo" width="100%">
+  <img src="Assets/README/hero.svg" alt="Video to Live Turbo" width="100%">
 </p>
 
 <p align="center">
   <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-# Video to Live Photo
+# Video to Live Turbo
 
-A small native macOS utility for turning DaVinci Resolve video exports into Apple Live Photos and AirDropping them to iPhone.
+A native macOS utility that **turns ordinary videos into iPhone Live Photos.**
 
-**Local-only.** No iCloud required. No Photos-library import. No server.
+**Video → Live Photo → iPhone**
 
-## Why
-
-A normal AirDrop of a matching HEIC + MOV arrives on iPhone as two separate files.
-
-SPP Live Export generates a valid Live Photo pair, wraps it as a macOS-recognized Live Photo bundle, and hands that bundle to AirDrop so the iPhone receives a real Live Photo.
-
-<p align="center">
-  <img src="Assets/README/workflow.svg" alt="SPP Live Export workflow" width="100%">
-</p>
+Everything runs locally. No iCloud, Photos-library import, or server is required, and source videos are never moved, overwritten, modified, or deleted.
 
 ## Features
 
-- Automatic watch folder for DaVinci Resolve exports
-- Manual multi-file import
-- MOV / MP4 / M4V → Apple Live Photo
-- Passthrough video export whenever possible
-- Portrait-first thumbnail gallery
-- Date grouping and per-day selection
-- Select all and Shift range selection
-- Batch AirDrop
-- Processing history and Finder reveal
-- Configurable input / output folders
-- Launch at login
-- Compact / standard / large thumbnail modes
-- Optional codec / resolution / frame-rate metadata
-- No Mac Photos-library dependency
-- Source footage is never moved, overwritten, modified, or deleted
+- Creates a ~3-second Live Photo by default, with duration adjustable up to the full source video
+- Starts the key photo at the beginning of the selected range; dragging it beyond the range makes the range follow automatically
+- Lets you keep or remove source-video audio before manual generation
+- Supports MOV / MP4 / M4V, batch import, batch generation, and batch AirDrop
+- Optionally auto-converts new videos from any chosen folder
+- Organizes history by date with re-AirDrop, readjustment, and Finder reveal
+- Exposes the conversion core through a CLI for Agents and scripts
+
+> WeChat Moments supports 3-second Live Photos; the app defaults to 3 seconds.
+
+<p align="center">
+  <img src="Assets/README/workflow.svg" alt="Video to Live Turbo workflow" width="100%">
+</p>
+
+## Manual workflow
+
+1. Open **Video to Live Turbo**.
+2. Import one or more videos. They enter **Pending** first; no output is created yet.
+3. Click a preview to adjust the clip, key photo, and duration, then choose whether to keep audio.
+4. Click **Generate Live Photo** to create the paired HEIC + MOV output.
+5. Select results under **Generated This Session** and AirDrop them to your iPhone.
+
+## Auto-convert folder
+
+Enable **Auto-convert new videos in folder** under Settings and choose a folder.
+
+The app scans the folder on launch and continues watching it while running. It is not tied to any editor: use a camera-ingest folder, Downloads, or an export folder from DaVinci Resolve, Final Cut Pro, Premiere Pro, or another app.
+
+## Agent / CLI
+
+The conversion core can be called without the App UI, which makes it suitable for Agents, shell scripts, and local automation:
+
+```bash
+spp-live-export [--cover seconds] [--start seconds] [--duration seconds] [--mute] <video> [output_dir]
+```
+
+The CLI controls the conversion core. App UI state such as Pending and History does not currently expose a separate HTTP API.
 
 ## Install
 
-### Download
+Download the latest:
 
-Open the repository Releases page and download the latest DMG.
+**Video to Live Turbo 1.0.0.dmg**
 
-The current public build is ad-hoc signed, not notarized with an Apple Developer ID. macOS may show an unidentified-developer warning. If that happens, use **System Settings → Privacy & Security → Open Anyway**, or build from source.
+Version 1.0.0 is ad-hoc signed and is not notarized with an Apple Developer ID. On first launch, macOS may require:
 
-### Build from source
+**System Settings → Privacy & Security → Open Anyway**
 
 Requirements:
 
 - Apple Silicon Mac
 - macOS 13 or later
-- Apple Command Line Tools / Swift
 
-Build the app:
+Build from source:
 
 ```bash
 ./scripts/build.sh
-```
-
-Build the app and a local DMG:
-
-```bash
 ./scripts/build.sh --dmg
 ```
 
 Artifacts are written to `dist/`.
 
-## Usage
+## Source-media safety
 
-1. Open **SPP Live Export** (the app name in the current v0.4.0 binary).
-2. Point DaVinci Resolve at the configured watch folder, or click **Import Video**.
-3. Wait for the Live Photos to appear.
-4. Select individual items, a whole date, a Shift range, or all visible items.
-5. Click **AirDrop** and choose your iPhone.
+Video to Live Turbo follows a non-destructive media workflow. It may read source videos and create new HEIC / MOV outputs, processing markers, and temporary AirDrop bundles, but it does not delete, move, overwrite, or modify source videos.
 
-The iPhone receives each selected item as a Live Photo.
+Automatic cleanup is limited to failed partial outputs and the app's own AirDrop cache.
 
-## Optional metadata
+## Compatibility
 
-`ffprobe` is optional. If available at `/usr/local/bin/ffprobe` or `/opt/homebrew/bin/ffprobe`, the app shows richer codec / resolution / frame-rate metadata.
+Live Photo preservation over AirDrop currently relies on macOS recognizing the `.pvt` package as `com.apple.private.live-photo-bundle`.
 
-Conversion itself does not depend on FFmpeg.
+The current Mac + iPhone workflow has been verified end to end: received items play normally as Live Photos on iPhone. This package type is a private Apple implementation and may change in a future OS release.
 
-## Project layout
-
-- `Sources/App.swift` — app entry point and page routing
-- `Sources/LiveLibrary.swift` — watcher, conversion orchestration, AirDrop packaging, settings
-- `Sources/Components.swift` — reusable UI and thumbnail cache
-- `Sources/RecentView.swift` — date-grouped gallery and batch selection
-- `Sources/HistoryView.swift` — generated-item history
-- `Sources/SettingsView.swift` — app settings
-- `HelperSources/SPPLiveExport/main.swift` — Live Photo pair generator
-- `Assets/Brand/` — app icon source
-- `Assets/README/` — project artwork
-
-## Safety
-
-Source media is treated as read-only.
-
-SPP Live Export may create:
-- HEIC + MOV outputs
-- its own processing markers
-- temporary AirDrop bundles in its cache directory
-
-It may remove only:
-- its own failed partial exports
-- its own AirDrop cache older than 24 hours
-
-It does **not** delete, move, overwrite, or modify original footage.
-
-## Compatibility note
-
-AirDrop preservation currently relies on macOS recognizing the `.pvt` package as `com.apple.private.live-photo-bundle`.
-
-This works in the tested macOS + iPhone workflow, but it is a private Apple bundle type and could change in a future OS release.
+`ffprobe` is optional. If available at `/usr/local/bin/ffprobe` or `/opt/homebrew/bin/ffprobe`, the app displays richer codec, resolution, and frame-rate details.
 
 ## License
 

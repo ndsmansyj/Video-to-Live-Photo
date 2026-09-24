@@ -1,177 +1,102 @@
 <p align="center">
-  <img src="Assets/README/hero.svg" alt="Video to Live Photo" width="100%">
+  <img src="Assets/README/hero.svg" alt="Video to Live Turbo" width="100%">
 </p>
 
 <p align="center">
   <a href="README.md">English</a> · <strong>简体中文</strong>
 </p>
 
-# Video to Live Photo
+# Video to Live Turbo
 
-一个原生 macOS 小工具，用来把普通视频转换成 Apple 实况照片（Live Photo），并通过 AirDrop 直接发送到 iPhone。
+一个原生 macOS 小工具：**把普通视频快速变成 iPhone Live Photo。**
 
-**全程本地处理。** 不需要 iCloud，不写入 Mac 照片图库，不依赖服务器。
+**Video → Live Photo → iPhone**
 
-## 它解决什么问题？
+全程本地处理，不需要 iCloud、不写入 Mac 照片图库、不依赖服务器，也不会移动、覆盖、修改或删除原视频。
 
-普通情况下，即使 HEIC 图片和 MOV 视频拥有匹配的 Live Photo 元数据，直接把这两个文件一起 AirDrop 到 iPhone，收到的通常还是：
+## 功能
 
-- 一张普通图片
-- 一个独立 MOV 视频
+- 默认生成约 3 秒 Live Photo，可自定义时长直到完整原视频
+- 初始封面位于选区开头；封面可在选区内自由移动，越界时选区自动跟随
+- 手动生成前可选择保留声音或静音
+- 支持 MOV / MP4 / M4V 与批量导入、批量生成、批量 AirDrop
+- 可选自动转换指定文件夹中的新视频，适配任意软件导出工作流
+- 历史结果按日期整理，可重新 AirDrop、重新调整并在 Finder 中定位
+- 转换核心提供 CLI，可被 Agent 与脚本直接调用
 
-而不是一张真正的“实况照片”。
-
-Video to Live Photo 会：
-
-1. 从视频中生成 Live Photo 所需的 HEIC + MOV 配对文件。
-2. 给两者写入匹配的 Apple Live Photo 元数据。
-3. 在 Mac 端封装成系统可识别的 Live Photo Bundle。
-4. 通过 AirDrop 发送到 iPhone。
-5. iPhone 最终收到的是一张真正的 Live Photo。
+> 朋友圈仅支持 3 秒 Live；App 默认时长为 3 秒。
 
 <p align="center">
-  <img src="Assets/README/workflow.svg" alt="Video to Live Photo 工作流" width="100%">
+  <img src="Assets/README/workflow.svg" alt="Video to Live Turbo 工作流" width="100%">
 </p>
 
-## 主要功能
+## 手动工作流
 
-- 自动监听 DaVinci Resolve 导出目录
-- 支持手动批量导入视频
-- 支持 MOV / MP4 / M4V
-- 尽可能使用视频流直通，不进行无意义的二次压制
-- 以竖屏素材为主的缩略图浏览界面
-- 按日期自动分组
-- 支持“选择本日”
-- 支持全选 / 取消全选
-- 支持 Shift 连续选择
-- 支持批量 AirDrop
-- 历史记录可重新 AirDrop
-- 可在 Finder 中定位生成文件
-- 可自定义监听目录和输出目录
-- 支持登录 Mac 后自动启动
-- 支持紧凑 / 标准 / 大缩略图
-- 可选显示分辨率、编码、帧率等技术信息
-- 不依赖 Mac Photos 照片图库
-- 不移动、不覆盖、不修改、不删除原始视频素材
+1. 打开 **Video to Live Turbo**。
+2. 导入一个或多个视频；素材先进入 **待生成**，此时不会输出文件。
+3. 点击画面调整片段、封面和时长；按需选择是否保留声音。
+4. 点击 **生成 Live Photo**，App 才会创建配对的 HEIC + MOV。
+5. 在 **本次生成** 中选择结果，AirDrop 到 iPhone。
 
-## 使用方法
+## 自动转换文件夹
 
-1. 打开 App。
-2. 在“设置”中确认监听目录。
-3. 在 DaVinci Resolve 中把视频导出到该目录。
-4. 或点击“导入视频”手动选择一个或多个视频。
-5. 等待 Live Photo 自动生成。
-6. 单选、整日选择、Shift 连选或全选需要发送的内容。
-7. 点击 **AirDrop**。
-8. 选择你的 iPhone。
-9. iPhone 相册中会收到真正的实况照片。
+在 **设置 → 自动化** 中开启 **自动转换文件夹中的新视频** 并指定文件夹。
 
-> 当前 v0.4.0 的 App 内部显示名称仍为 **SPP Live Export**。仓库公开名称已经调整为 **Video to Live Photo**，后续版本会逐步统一公开品牌名称，同时保留内部 Bundle ID 和数据目录以避免破坏已有设置。
+App 打开时会扫描该文件夹，运行期间持续检测新视频并自动转换。它不绑定任何剪辑软件，可用于相机拷贝目录、下载目录，或 DaVinci Resolve、Final Cut Pro、Premiere Pro 等软件的导出目录。
+
+## Agent / CLI
+
+转换核心可以不经过 App UI 直接调用，适合 Agent、Shell 脚本和本地自动化：
+
+```bash
+spp-live-export [--cover 秒] [--start 秒] [--duration 秒] [--mute] <video> [output_dir]
+```
+
+CLI 控制的是转换核心；首页、待生成列表、历史等 App UI 状态目前没有单独的 HTTP API。
 
 ## 安装
 
-### 下载 DMG
+从 GitHub **Releases** 下载：
 
-到 GitHub 的 **Releases** 页面下载最新 DMG。
+**Video to Live Turbo 1.0.0.dmg**
 
-当前公开 DMG 使用本地 ad-hoc 签名，没有 Apple Developer ID 公证，因此 macOS 可能提示无法验证开发者。
-
-如果遇到提示，可以进入：
+当前 1.0.0 使用 ad-hoc 签名，尚未 Apple Developer ID 公证。macOS 首次打开时如提示无法验证开发者，可进入：
 
 **系统设置 → 隐私与安全性 → 仍要打开**
-
-也可以直接从源码构建。
-
-### 从源码构建
 
 要求：
 
 - Apple Silicon Mac
 - macOS 13 或更新版本
-- Apple Command Line Tools / Swift
 
-构建 App：
+从源码构建：
 
 ```bash
 ./scripts/build.sh
-```
-
-构建 App + DMG：
-
-```bash
 ./scripts/build.sh --dmg
 ```
 
-生成文件位于 `dist/`。
-
-## DaVinci Resolve 工作流
-
-推荐把 Resolve 的输出目录设置成 App 的监听目录。
-
-之后基本操作就是：
-
-```text
-DaVinci Resolve
-    ↓
-自动监听
-    ↓
-生成 Live Photo
-    ↓
-日期分组 / 批量挑选
-    ↓
-AirDrop
-    ↓
-iPhone 实况照片
-```
-
-不需要先导入 Mac Photos，也不需要再在手机上二次转换。
+构建产物位于 `dist/`。
 
 ## 原始素材安全
 
-这个项目按照“原片只读”的思路设计。
+Video to Live Turbo 按非破坏性流程处理素材。程序可以读取原视频，并创建新的 HEIC / MOV、处理标记及 AirDrop 临时缓存，但不会：
 
-程序可以：
+- 删除原视频
+- 移动原视频
+- 覆盖原视频
+- 修改原视频内容
 
-- 读取原始视频
-- 创建新的 HEIC / MOV 输出
-- 创建处理标记
-- 创建自己的 AirDrop 临时缓存
+自动清理只针对 App 自己生成的失败半成品和 AirDrop 临时缓存。
 
-程序只会自动清理：
+## 兼容性
 
-- 自己产生且转换失败的半成品
-- 自己的 AirDrop 临时缓存
+AirDrop 保持 Live Photo 依赖 macOS 对 `.pvt` / `com.apple.private.live-photo-bundle` 的系统识别。
 
-程序不会：
+当前流程已经在真实 Mac + iPhone 上验证：AirDrop 接收后可作为 Live Photo 正常播放。该 Bundle 类型属于 Apple 私有实现，未来系统大版本更新后仍可能发生变化。
 
-- 删除原始视频
-- 移动原始视频
-- 覆盖原始视频
-- 修改原始视频内容
+`ffprobe` 不是转换依赖；如系统中存在 `/usr/local/bin/ffprobe` 或 `/opt/homebrew/bin/ffprobe`，App 会额外显示编码、分辨率和帧率等技术信息。
 
-## 关于 ffprobe
-
-`ffprobe` **不是转换所必需的依赖**。
-
-如果系统中存在：
-
-- `/usr/local/bin/ffprobe`
-- `/opt/homebrew/bin/ffprobe`
-
-App 会额外显示编码、分辨率、帧率等技术信息。
-
-没有 ffprobe 也不影响 Live Photo 转换和 AirDrop。
-
-## 兼容性说明
-
-目前 AirDrop 后能够保持 Live Photo，依赖 macOS 对：
-
-`com.apple.private.live-photo-bundle`
-
-也就是 `.pvt` Live Photo Bundle 的系统识别。
-
-这条链路已经在真实 Mac + iPhone 上验证可用，但它属于 Apple 的私有 Bundle 类型，未来 macOS / iOS 大版本更新后存在变化的可能。
-
-## 开源协议
+## License
 
 MIT

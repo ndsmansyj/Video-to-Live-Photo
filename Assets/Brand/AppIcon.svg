@@ -1,58 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="132" y1="118" x2="874" y2="900" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#20242B"/>
-      <stop offset="0.55" stop-color="#111318"/>
-      <stop offset="1" stop-color="#07080A"/>
-    </linearGradient>
-    <linearGradient id="ring" x1="280" y1="300" x2="754" y2="750" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#8BE7FF"/>
-      <stop offset="0.48" stop-color="#6798FF"/>
-      <stop offset="1" stop-color="#9B72FF"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(512 505) rotate(90) scale(330)">
-      <stop offset="0" stop-color="#7EA2FF" stop-opacity=".18"/>
-      <stop offset="1" stop-color="#7EA2FF" stop-opacity="0"/>
-    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#000000" flood-opacity=".18"/>
+    </filter>
   </defs>
-
-  <rect x="72" y="72" width="880" height="880" rx="222" fill="url(#bg)"/>
-  <circle cx="512" cy="512" r="332" fill="url(#glow)"/>
-
-  <!-- Live Photo ring -->
-  <path
-    d="M318 601
-       A230 230 0 1 1 658 711"
-    fill="none"
-    stroke="url(#ring)"
-    stroke-width="62"
-    stroke-linecap="round"/>
-
-  <path
-    d="M373 584
-       A165 165 0 1 1 621 655"
-    fill="none"
-    stroke="#F6F8FF"
-    stroke-opacity=".95"
-    stroke-width="44"
-    stroke-linecap="round"/>
-
-  <circle cx="512" cy="512" r="34" fill="#F8FAFF"/>
-
-  <!-- Arrow grows directly out of the outer ring endpoint -->
-  <path
-    d="M658 711
-       C704 683 744 645 772 601"
-    fill="none"
-    stroke="url(#ring)"
-    stroke-width="62"
-    stroke-linecap="round"/>
-
-  <path
-    d="M710 592 L790 576 L774 656"
-    fill="none"
-    stroke="url(#ring)"
-    stroke-width="50"
-    stroke-linecap="round"
-    stroke-linejoin="round"/>
+  <rect x="72" y="72" width="880" height="880" rx="222" fill="#F4F3EF" filter="url(#shadow)"/>
+  <path d="M344 665 C245 555 260 392 405 306" fill="none" stroke="#3467EB" stroke-width="72" stroke-linecap="round"/>
+  <rect x="390" y="350" width="492" height="338" rx="70" fill="#24272B"/>
 </svg>

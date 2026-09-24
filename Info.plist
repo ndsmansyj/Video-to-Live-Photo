@@ -2,14 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleDisplayName</key><string>SPP Live Export</string>
-  <key>CFBundleExecutable</key><string>SPP Live Export</string>
+  <key>CFBundleDisplayName</key><string>Video to Live Turbo</string>
+  <key>CFBundleExecutable</key><string>Video to Live Turbo</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleIdentifier</key><string>com.songpanpan.SPPLiveExport</string>
-  <key>CFBundleName</key><string>SPP Live Export</string>
+  <key>CFBundleName</key><string>Video to Live Turbo</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.4.0</string>
-  <key>CFBundleVersion</key><string>5</string>
+  <key>CFBundleShortVersionString</key><string>1.0.0</string>
+  <key>CFBundleVersion</key><string>19</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict>

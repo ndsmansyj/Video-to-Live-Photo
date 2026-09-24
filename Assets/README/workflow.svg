@@ -15,7 +15,7 @@
     <g transform="translate(70 104)">
       <rect width="270" height="150" rx="24" fill="#FFFFFF" stroke="#DDE1E8"/>
       <text x="28" y="50" font-size="16" font-weight="700" fill="#7B8190">01</text>
-      <text x="28" y="88" font-size="24" font-weight="700" fill="#17191D">DaVinci / Video</text>
+      <text x="28" y="88" font-size="24" font-weight="700" fill="#17191D">Video</text>
       <text x="28" y="119" font-size="15" fill="#737986">Watch folder or manual import</text>
     </g>
     <path d="M360 180h74" stroke="#A8AFBA" stroke-width="4" stroke-linecap="round"/>
