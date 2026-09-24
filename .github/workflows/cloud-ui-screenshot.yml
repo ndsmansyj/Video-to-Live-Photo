@@ -1,0 +1,40 @@
+name: Cloud UI Screenshot Test
+
+on:
+  push:
+    branches:
+      - test/cloud-ui-screenshot-20260924
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  screenshot:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build app
+        run: ./scripts/build.sh
+
+      - name: Launch app
+        run: |
+          open -na "$GITHUB_WORKSPACE/dist/Video to Live Turbo.app"
+          sleep 6
+          pgrep -fl "Video to Live Turbo" || true
+
+      - name: Capture screen
+        run: |
+          mkdir -p ui-captures
+          screencapture -x -t png ui-captures/live-main.png
+          file ui-captures/live-main.png
+          ls -lh ui-captures/live-main.png
+
+      - name: Upload screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-turbo-ui-screenshot
+          path: ui-captures/live-main.png
+          if-no-files-found: error
+          retention-days: 3
