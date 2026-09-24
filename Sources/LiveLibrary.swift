@@ -47,6 +47,7 @@ final class LiveLibrary: ObservableObject {
 
     init() {
         let defaults = UserDefaults.standard
+        let uiFixture = UIFixture.current
         let home = FileManager.default.homeDirectoryForCurrentUser
         let root = home.appendingPathComponent("Movies/SPP_Live_Export", isDirectory: true)
 
@@ -79,6 +80,11 @@ final class LiveLibrary: ObservableObject {
             launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
         }
 
+        if let uiFixture {
+            applyUIFixture(uiFixture)
+            return
+        }
+
         prepareFolders()
         refresh()
         cleanupOldAirDropCache()
@@ -94,6 +100,93 @@ final class LiveLibrary: ObservableObject {
     }
 
     deinit { timer?.invalidate() }
+
+    private func applyUIFixture(_ fixture: UIFixture) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Video-to-Live-Turbo-UI-Fixture", isDirectory: true)
+        inputURL = root.appendingPathComponent("Input", isDirectory: true)
+        outputURL = root.appendingPathComponent("Output", isDirectory: true)
+        isMonitoring = false
+        statusText = "就绪"
+        thumbnailZoom = 0.35
+        showTechnicalInfo = true
+
+        switch fixture {
+        case .pending:
+            pendingVideos = [
+                PendingVideo(
+                    sourceURL: root.appendingPathComponent("客厅漫游.mov"),
+                    sourceDuration: 18.4,
+                    coverSeconds: 5.2,
+                    clipStart: 4.0,
+                    clipDuration: 3.0
+                ),
+                PendingVideo(
+                    sourceURL: root.appendingPathComponent("餐厅细节.mp4"),
+                    sourceDuration: 12.8,
+                    coverSeconds: 3.8,
+                    clipStart: 2.5,
+                    clipDuration: 5.0
+                ),
+                PendingVideo(
+                    sourceURL: root.appendingPathComponent("夜景氛围.mov"),
+                    sourceDuration: 24.1,
+                    coverSeconds: 11.0,
+                    clipStart: 10.0,
+                    clipDuration: 3.0
+                )
+            ]
+            operationMessage = "已加入 3 个待生成视频，可先调整片段与封面。"
+
+        case .history:
+            let now = Date()
+            items = [
+                LiveItem(
+                    id: "living-room-LIVE",
+                    baseName: "客厅漫游",
+                    imageURL: root.appendingPathComponent("living-room.heic"),
+                    videoURL: root.appendingPathComponent("living-room.mov"),
+                    modifiedAt: now.addingTimeInterval(-240),
+                    media: MediaInfo(durationText: "3 秒", detailsText: "2160×3840 · HEVC · 60fps"),
+                    sourceURL: nil,
+                    coverSeconds: 5.2,
+                    clipStart: 4.0,
+                    clipDuration: 3.0,
+                    includeAudio: true
+                ),
+                LiveItem(
+                    id: "dining-room-LIVE",
+                    baseName: "餐厅细节",
+                    imageURL: root.appendingPathComponent("dining-room.heic"),
+                    videoURL: root.appendingPathComponent("dining-room.mov"),
+                    modifiedAt: now.addingTimeInterval(-1800),
+                    media: MediaInfo(durationText: "5 秒", detailsText: "2160×3840 · HEVC · 30fps"),
+                    sourceURL: nil,
+                    coverSeconds: 3.8,
+                    clipStart: 2.5,
+                    clipDuration: 5.0,
+                    includeAudio: false
+                ),
+                LiveItem(
+                    id: "night-LIVE",
+                    baseName: "夜景氛围",
+                    imageURL: root.appendingPathComponent("night.heic"),
+                    videoURL: root.appendingPathComponent("night.mov"),
+                    modifiedAt: now.addingTimeInterval(-26 * 60 * 60),
+                    media: MediaInfo(durationText: "3 秒", detailsText: "2160×3840 · HEVC · 60fps"),
+                    sourceURL: nil,
+                    coverSeconds: 11.0,
+                    clipStart: 10.0,
+                    clipDuration: 3.0,
+                    includeAudio: true
+                )
+            ]
+            sessionGeneratedIDs = Set(items.prefix(2).map(\.id))
+
+        case .clipEditor:
+            break
+        }
+    }
 
     // MARK: - Library
 
