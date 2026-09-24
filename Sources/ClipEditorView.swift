@@ -241,6 +241,7 @@ struct ClipEditorView: View {
         clipStart: Double? = nil,
         clipDuration: Double? = nil,
         actionTitle: String = "完成",
+        fixtureDuration: Double? = nil,
         onSave: @escaping (Double, Double, Double) async -> Bool
     ) {
         self.sourceURL = sourceURL
@@ -251,6 +252,15 @@ struct ClipEditorView: View {
         self.actionTitle = actionTitle
         self.onSave = onSave
         _player = State(initialValue: AVPlayer(url: sourceURL))
+
+        if let fixtureDuration {
+            _sourceDuration = State(initialValue: fixtureDuration)
+            _coverSeconds = State(initialValue: coverSeconds ?? min(4.5, fixtureDuration))
+            _clipStart = State(initialValue: clipStart ?? 3.0)
+            let seededDuration = clipDuration ?? min(3.0, fixtureDuration)
+            _clipDuration = State(initialValue: seededDuration)
+            _durationText = State(initialValue: Self.numberText(seededDuration))
+        }
     }
 
     var body: some View {
@@ -292,7 +302,11 @@ struct ClipEditorView: View {
             .padding(.bottom, 16)
         }
         .frame(width: editorWidth, height: editorHeight)
-        .task { await loadDuration() }
+        .task {
+            if UIFixture.current != .clipEditor {
+                await loadDuration()
+            }
+        }
         .onChange(of: coverSeconds) { _ in
             player.pause()
             seekToCover()
