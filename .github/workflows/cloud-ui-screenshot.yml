@@ -1,17 +1,6 @@
 name: UI Snapshots
 
 on:
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "Sources/**"
-      - "Assets/Brand/**"
-      - "Info.plist"
-      - "scripts/build.sh"
-      - "scripts/find_window_id.swift"
-      - "scripts/make_ui_overview.swift"
-      - ".github/workflows/cloud-ui-screenshot.yml"
   pull_request:
     branches:
       - main
