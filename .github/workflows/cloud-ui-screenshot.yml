@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: live-turbo-ui-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   screenshot:
     runs-on: macos-latest
@@ -18,23 +22,42 @@ jobs:
       - name: Build app
         run: ./scripts/build.sh
 
-      - name: Launch app
+      - name: Capture app pages
+        shell: bash
         run: |
-          open -na "$GITHUB_WORKSPACE/dist/Video to Live Turbo.app"
-          sleep 6
-          pgrep -fl "Video to Live Turbo" || true
-
-      - name: Capture screen
-        run: |
+          set -euo pipefail
+          APP="$GITHUB_WORKSPACE/dist/Video to Live Turbo.app"
           mkdir -p ui-captures
-          screencapture -x -t png ui-captures/live-main.png
-          file ui-captures/live-main.png
-          ls -lh ui-captures/live-main.png
 
-      - name: Upload screenshot
+          for page in recent history settings about; do
+            open -na "$APP" --args --ui-page "$page"
+
+            window_id=""
+            for attempt in {1..20}; do
+              sleep 1
+              window_id="$(swift scripts/find_window_id.swift "Video to Live Turbo" 2>/dev/null || true)"
+              if [[ -n "$window_id" ]]; then
+                break
+              fi
+            done
+
+            if [[ -z "$window_id" ]]; then
+              echo "Could not find app window for page: $page" >&2
+              exit 1
+            fi
+
+            screencapture -x -o -l "$window_id" "ui-captures/${page}.png"
+            file "ui-captures/${page}.png"
+            killall "Video to Live Turbo" || true
+            sleep 1
+          done
+
+          ls -lh ui-captures
+
+      - name: Upload screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: live-turbo-ui-screenshot
-          path: ui-captures/live-main.png
+          name: live-turbo-ui-pages
+          path: ui-captures/*.png
           if-no-files-found: error
           retention-days: 3
