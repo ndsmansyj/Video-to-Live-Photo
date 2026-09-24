@@ -1,9 +1,26 @@
-name: Cloud UI Screenshot Test
+name: UI Snapshots
 
 on:
   push:
+    branches-ignore:
+      - main
+    paths:
+      - "Sources/**"
+      - "Assets/Brand/**"
+      - "Info.plist"
+      - "scripts/build.sh"
+      - "scripts/find_window_id.swift"
+      - ".github/workflows/cloud-ui-screenshot.yml"
+  pull_request:
     branches:
-      - test/cloud-ui-screenshot-20260924
+      - main
+    paths:
+      - "Sources/**"
+      - "Assets/Brand/**"
+      - "Info.plist"
+      - "scripts/build.sh"
+      - "scripts/find_window_id.swift"
+      - ".github/workflows/cloud-ui-screenshot.yml"
   workflow_dispatch:
 
 permissions:
@@ -36,16 +53,10 @@ jobs:
             for attempt in {1..20}; do
               sleep 1
               window_id="$(swift scripts/find_window_id.swift "Video to Live Turbo" 2>/dev/null || true)"
-              if [[ -n "$window_id" ]]; then
-                break
-              fi
+              [[ -n "$window_id" ]] && break
             done
 
-            if [[ -z "$window_id" ]]; then
-              echo "Could not find app window for page: $page" >&2
-              exit 1
-            fi
-
+            [[ -n "$window_id" ]] || { echo "No app window found for page: $page" >&2; exit 1; }
             screencapture -x -o -l "$window_id" "ui-captures/${page}.png"
             file "ui-captures/${page}.png"
             killall "Video to Live Turbo" || true
